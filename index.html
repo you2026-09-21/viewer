@@ -71,7 +71,7 @@ function init(){
   client = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID, scope: SCOPE,
     callback: function(r){ var p = pending; pending = null;
-      if(r && r.access_token){ token = r.access_token; tokenExp = Date.now() + ((+r.expires_in || 3600) - 120) * 1000; if(p) p.res(token); }
+      if(r && r.access_token){ token = r.access_token; tokenExp = Date.now() + ((+r.expires_in || 3600) - 120) * 1000; kvSet("tok", { t: token, e: tokenExp }); if(p) p.res(token); }
       else if(p) p.rej(new Error("ログインできませんでした。もう一度お試しください。")); },
     error_callback: function(){ var p = pending; pending = null; if(p) p.rej(new Error("ログインが取りやめられました。")); }
   });
@@ -89,7 +89,7 @@ function ensureToken(){ return hasToken() ? Promise.resolve(token) : requestToke
 function api(url, as){
   return ensureToken().then(function(){ return fetch(url, { headers: { Authorization: "Bearer " + token } }); })
     .then(function(r){
-      if(r.status === 401){ token = null; return requestToken("").then(function(){ return fetch(url, { headers: { Authorization: "Bearer " + token } }); }); }
+      if(r.status === 401){ token = null; kvSet("tok", null); return requestToken("").then(function(){ return fetch(url, { headers: { Authorization: "Bearer " + token } }); }); }
       return r;
     }).then(function(r){
       if(!r.ok) throw new Error("読み込めませんでした（" + r.status + "）。");
@@ -135,6 +135,10 @@ kvGet("lastOpen").then(function(last){
 }).then(function(){
   return kvSet("lastOpen", Date.now());
 }).then(function(){
+  /* keep the short-lived pass (about an hour) so reopening doesn't need a new sign-in */
+  return kvGet("tok");
+}).then(function(t){
+  if(t && t.t && t.e > Date.now()){ token = t.t; tokenExp = t.e; }
   return kvGet("code");
 }).then(function(c){
   if(c && c.text) run(c.text); else gate.hidden = false;
